@@ -8,23 +8,23 @@ require('chai')
   .should()
 
 contract('dBank', ([deployer, user]) => {
-  let dbank, token
+  let dBankContract, token
   const interestPerSecond = 31668017 //(10% APY) for min. deposit (0.01 ETH)
 
   beforeEach(async () => {
     token = await Token.new()
-    dbank = await DecentralizedBank.new(token.address)
-    await token.passMinterRole(dbank.address, {from: deployer})
+    dBankContract = await DecentralizedBank.new(token.address)
+    await token.passMinterRole(dBankContract.address, {from: deployer})
   })
 
   describe('testing token contract...', () => {
     describe('success', () => {
       it('checking token name', async () => {
-        expect(await token.name()).to.be.eq('Decentralized Bank Currency')
+        expect(await token.name()).to.be.eq('ERC20 Name')
       })
 
       it('checking token symbol', async () => {
-        expect(await token.symbol()).to.be.eq('DBC')
+        expect(await token.symbol()).to.be.eq('ZZZ')
       })
 
       it('checking token initial total supply', async () => {
@@ -32,7 +32,7 @@ contract('dBank', ([deployer, user]) => {
       })
 
       it('dBank should have Token minter role', async () => {
-        expect(await token.minter()).to.eq(dbank.address)
+        expect(await token.minter()).to.eq(dBankContract.address)
       })
     })
 
@@ -42,7 +42,7 @@ contract('dBank', ([deployer, user]) => {
       })
 
       it('tokens minting should be rejected', async () => {
-        await token.mint(user, '1', {from: deployer}).should.be.rejectedWith(EVM_REVERT) //unauthorized minter
+        await token.mint(user, '1', {from: deployer}).should.be.rejectedWith(EVM_REVERT)  // unauthorized minter
       })
     })
   })
@@ -52,25 +52,29 @@ contract('dBank', ([deployer, user]) => {
 
     describe('success', () => {
       beforeEach(async () => {
-        await dbank.deposit({value: 10**16, from: user}) //0.01 ETH
+        await dBankContract.deposit({value: 10**16, from: user}) //0.01 ETH
       })
 
       it('balance should increase', async () => {
-        expect(Number(await dbank.etherBalanceOf(user))).to.eq(10**16)
+        expect(Number(await dBankContract.etherBalance(user))).to.eq(10**16)
       })
 
       it('deposit time should > 0', async () => {
-        expect(Number(await dbank.depositStart(user))).to.be.above(0)
+        expect(Number(await dBankContract.depositTimeStamps(user))).to.be.above(0)
       })
 
       it('deposit status should eq true', async () => {
-        expect(await dbank.isDeposited(user)).to.eq(true)
+        expect(await dBankContract.isDeposited(user)).to.eq(true)
       })
     })
 
     describe('failure', () => {
-      it('depositing should be rejected', async () => {
-        await dbank.deposit({value: 10**15, from: user}).should.be.rejectedWith(EVM_REVERT) //to small amount
+      it('depositing should be rejected due to small emount', async () => {
+         await dBankContract.deposit({value: 10**15, from: user}).should.be.rejectedWith(EVM_REVERT) // too small amount
+      })
+      it('depositing should be rejected due to depositing twice', async () => {
+         await dBankContract.deposit({value: 10**16, from: user})
+         await dBankContract.deposit({value: 10**16, from: user}).should.be.rejectedWith(EVM_REVERT) // too small amount
       })
     })
   })
@@ -81,17 +85,17 @@ contract('dBank', ([deployer, user]) => {
     describe('success', () => {
 
       beforeEach(async () => {
-        await dbank.deposit({value: 10**16, from: user}) //0.01 ETH
+        await dBankContract.deposit({value: 10**16, from: user}) //0.01 ETH
 
         await wait(2) //accruing interest
 
         balance = await web3.eth.getBalance(user)
-        await dbank.withdraw({from: user})
+        await dBankContract.withdraw({from: user})
       })
 
       it('balances should decrease', async () => {
-        expect(Number(await web3.eth.getBalance(dbank.address))).to.eq(0)
-        expect(Number(await dbank.etherBalanceOf(user))).to.eq(0)
+        expect(Number(await web3.eth.getBalance(dBankContract.address))).to.eq(0)
+        expect(Number(await dBankContract.etherBalance(user))).to.eq(0)
       })
 
       it('user should receive ether back', async () => {
@@ -106,18 +110,18 @@ contract('dBank', ([deployer, user]) => {
         expect(balance).to.be.below(interestPerSecond*4)
       })
 
-      it('depositer data should be reseted', async () => {
-        expect(Number(await dbank.depositStart(user))).to.eq(0)
-        expect(Number(await dbank.etherBalanceOf(user))).to.eq(0)
-        expect(await dbank.isDeposited(user)).to.eq(false)
+      it('depositor data should be reset', async () => {
+        expect(Number(await dBankContract.etherBalance(user))).to.eq(0)
+        expect(Number(await dBankContract.depositTimeStamps(user))).to.eq(0)
+        expect(await dBankContract.isDeposited(user)).to.eq(false)
       })
     })
 
     describe('failure', () => {
       it('withdrawing should be rejected', async () =>{
-        await dbank.deposit({value: 10**16, from: user}) //0.01 ETH
+        await dBankContract.deposit({value: 10**16, from: user}) //0.01 ETH
         await wait(2) //accruing interest
-        await dbank.withdraw({from: deployer}).should.be.rejectedWith(EVM_REVERT) //wrong user
+        await dBankContract.withdraw({from: deployer}).should.be.rejectedWith(EVM_REVERT) //wrong user
       })
     })
   })
